@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AACT Database Schema Explorer</title>
+<style>
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface2: #232736;
+  --border: #2e3348;
+  --text: #e1e4ed;
+  --text-dim: #8b8fa3;
+  --accent: #6c8cff;
+  --accent2: #a78bfa;
+  --pk: #f59e0b;
+  --fk: #10b981;
+  --nct: #6c8cff;
+  --protocol: #3b82f6;
+  --results: #f97316;
+  --both: #8b5cf6;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+  height: 100vh;
+}
+#app { display: flex; height: 100vh; }
+
+/* Left sidebar */
+#sidebar {
+  width: 320px;
+  min-width: 320px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+}
+#sidebar-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+#sidebar-header h1 {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+}
+#sidebar-header p {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+#search-box {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+#search-input {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+#search-input:focus { border-color: var(--accent); }
+#search-input::placeholder { color: var(--text-dim); }
+
+#filter-bar {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.filter-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.filter-btn:hover { border-color: var(--accent); color: var(--text); }
+.filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.filter-btn.active-protocol { background: var(--protocol); border-color: var(--protocol); color: #fff; }
+.filter-btn.active-results { background: var(--results); border-color: var(--results); color: #fff; }
+
+#table-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+#table-list::-webkit-scrollbar { width: 6px; }
+#table-list::-webkit-scrollbar-track { background: transparent; }
+#table-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.table-item {
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-bottom: 2px;
+  border-left: 3px solid transparent;
+}
+.table-item:hover { background: var(--surface2); }
+.table-item.selected { background: var(--surface2); border-left-color: var(--accent); }
+.table-item-name {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.table-item-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+  display: flex;
+  gap: 8px;
+}
+.domain-badge {
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.domain-protocol { background: rgba(59,130,246,0.15); color: var(--protocol); }
+.domain-results { background: rgba(249,115,22,0.15); color: var(--results); }
+.domain-both { background: rgba(139,92,246,0.15); color: var(--both); }
+
+/* Main area */
+#main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+#toolbar {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  z-index: 5;
+}
+.tool-btn {
+  padding: 6px 14px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+.tool-btn:hover { border-color: var(--accent); color: var(--text); }
+.tool-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+#toolbar .separator { width: 1px; height: 20px; background: var(--border); }
+#stats {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+#canvas-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+#graph-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Right detail panel */
+#detail-panel {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100vh;
+  width: 0;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+  transition: width 0.3s ease;
+  z-index: 20;
+}
+#detail-panel.open { width: 440px; overflow-y: auto; }
+#detail-panel::-webkit-scrollbar { width: 6px; }
+#detail-panel::-webkit-scrollbar-track { background: transparent; }
+#detail-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+#detail-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+#detail-close {
+  float: right;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 18px;
+  padding: 4px;
+  line-height: 1;
+}
+#detail-close:hover { color: var(--text); }
+#detail-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+#detail-desc {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+#detail-badges {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.detail-badge {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: var(--surface2);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+}
+
+#detail-body { padding: 16px; }
+
+.detail-section {
+  margin-bottom: 20px;
+}
+.detail-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.col-row {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  transition: background 0.15s;
+  gap: 8px;
+}
+.col-row:hover { background: var(--surface2); }
+.col-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.col-icon-pk { background: rgba(245,158,11,0.2); color: var(--pk); }
+.col-icon-fk { background: rgba(16,185,129,0.2); color: var(--fk); }
+.col-icon-nct { background: rgba(108,140,255,0.2); color: var(--nct); }
+.col-icon-reg { background: var(--surface2); color: var(--text-dim); }
+.col-name { font-weight: 600; flex-shrink: 0; }
+.col-type {
+  font-size: 10px;
+  color: var(--text-dim);
+  background: var(--surface2);
+  padding: 1px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.col-desc {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-left: auto;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 150px;
+}
+.col-row[title] { cursor: help; }
+
+.rel-row {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  background: var(--surface2);
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  gap: 8px;
+}
+.rel-row:hover { background: var(--border); }
+.rel-arrow { color: var(--fk); font-weight: 700; }
+.rel-table { font-weight: 600; color: var(--accent); }
+.rel-col { color: var(--text-dim); font-size: 11px; }
+.rel-type {
+  margin-left: auto;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+.rel-type-parent { background: rgba(16,185,129,0.15); color: var(--fk); }
+.rel-type-child { background: rgba(245,158,11,0.15); color: var(--pk); }
+
+/* SQL snippet */
+.sql-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre;
+  color: var(--text-dim);
+}
+.sql-keyword { color: var(--accent); font-weight: 600; }
+.sql-table { color: var(--pk); }
+.sql-column { color: var(--fk); }
+
+/* Tooltip */
+#tooltip {
+  position: fixed;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 11px;
+  max-width: 300px;
+  pointer-events: none;
+  z-index: 100;
+  display: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+/* Legend */
+#legend {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 11px;
+  z-index: 5;
+  display: flex;
+  gap: 16px;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+/* Minimap */
+#minimap {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  width: 160px;
+  height: 120px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  z-index: 5;
+  overflow: hidden;
+}
+#minimap canvas {
+  width: 100%;
+  height: 100%;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  #sidebar { width: 260px; min-width: 260px; }
+  #detail-panel.open { width: 360px; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="sidebar">
+    <div id="sidebar-header">
+      <h1>AACT Schema Explorer</h1>
+      <p>Interactive visual explorer for the AACT (Aggregate Analysis of ClinicalTrials.gov) relational database schema. 48 tables, 63 foreign key relationships.</p>
+    </div>
+    <div id="search-box">
+      <input type="text" id="search-input" placeholder="Search tables or columns..." />
+    </div>
+    <div id="filter-bar">
+      <button class="filter-btn active" data-filter="all">All (48)</button>
+      <button class="filter-btn" data-filter="Protocol">Protocol</button>
+      <button class="filter-btn" data-filter="Results">Results</button>
+      <button class="filter-btn" data-filter="one">1:1</button>
+      <button class="filter-btn" data-filter="many">1:Many</button>
+    </div>
+    <div id="table-list"></div>
+  </div>
+  <div id="main">
+    <div id="toolbar">
+      <button class="tool-btn active" data-view="graph" onclick="setView('graph')">Graph View</button>
+      <button class="tool-btn" data-view="grid" onclick="setView('grid')">Grid View</button>
+      <div class="separator"></div>
+      <button class="tool-btn" onclick="toggleNctEdges()">Toggle nct_id edges</button>
+      <button class="tool-btn" onclick="resetZoom()">Reset Zoom</button>
+      <button class="tool-btn" onclick="fitAll()">Fit All</button>
+      <span id="stats"></span>
+    </div>
+    <div id="canvas-container">
+      <canvas id="graph-canvas"></canvas>
+      <div id="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--protocol)"></div> Protocol</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--results)"></div> Results</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--both)"></div> Both</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--pk)"></div> PK</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--fk)"></div> FK</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--nct)"></div> nct_id</div>
+      </div>
+    </div>
+  </div>
+  <div id="detail-panel">
+    <div id="detail-header">
+      <button id="detail-close" onclick="closeDetail()">&times;</button>
+      <div id="detail-title"></div>
+      <div id="detail-desc"></div>
+      <div id="detail-badges"></div>
+    </div>
+    <div id="detail-body"></div>
+  </div>
+</div>
+<div id="tooltip"></div>
+
+<script>
+const SCHEMA = {"tables":[{"name":"studies","primary_key":"nct_id","description":"Basic info about study, including study title, date study registered with ClinicalTrials.gov, date results first posted to ClinicalTrials.gov, dates for study start and completion, phase of study, enrollment status, planned or actual enrollment, number of study arms/groups, etc.","domain":"Protocol & Results","rows_per_study":"one","row_count":"375,612","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":true,"is_foreign_key":false,"is_nct_id":true,"description":"(primary key)  NCT ID is a unique identification code given to each clinical study registered on ClinicalTrials.gov. The format is the letters \"NCT\" followed by an 8-digit number (for example, NCT00000419)."},{"name":"nlm_download_date_description","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Date NLM made study available via their API."},{"name":"study_first_submitted_date","type":"date","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Per NLM: \"The _submitted suffix indicates the date that the responsible party pressed the release button in the ClinicalTrials.gov data submission system, thereby submitting the data for review prior to posting.\""},{"name":"results_first_submitted_date","type":"date","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"This value is only available for studies that have results.  It is the date when the results were first received.  Per NLM: \"The _submitted suffix indicates the date that the responsible party pressed the release button in the ClinicalTrials.gov data submission system, thereby submitting the data for review prior to posting.\""},{"name":"disposition_first_submitted_date","type":"date","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Date when a sponsor indicates that they will be delaying posting of results (and are certifying initial approval or new use), or when they apply for an extension of the deadline. Per NLM: \"The _submitted suffix indicates the date that the responsible party pressed the release button in the ClinicalTrials.gov data submission system, thereby submitting the data for review prior to posting.\""},{"name":"last_update_submitted_date","type":"date","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Per NLM: \"The _submitted suffix indicates the date that the responsible party pressed the release button in the ClinicalTrials.gov data submission system, thereby submitting the data for review prior to posting.\""},{"name":"study_first_submitted_qc_date","type":"date","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Per NLM: \"The _submitted_qc suffix indicates the submission date of the version of the record that met quality control criteria. It is common for there to be revisions between the first submission and the submission that meets qc criteria. Note this is not the date that the qc review was completed.\""},{"name":"study_first_posted_date","type":"date","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Per NLM: \"The _posted suffix indicates the date that a submission was made public on ClinicalTrials.gov. Typically, posting occurs the business day after qc review was successfully completed. We began collecting posted dates in early 2017. Dates from before then are estmates. All posted dates include a type attribute of Actual or Estimate.\""},{"name":"study_first_posted_date_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"results_first_submitted_qc_date","type":"date","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Per NLM: \"The _submitted_qc suffix indicates the submission date of the version of the record that met quality control criteria. It is common for there to be revisions between the first submission and the submission that meets qc criteria. Note this is not the date that the qc review was completed.\""},{"name":"results_first_posted_date","type":"date","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Per NLM: \"The _posted suffix indicates the date that a submission was made public on ClinicalTrials.gov. Typically, posting occurs the business day after qc review was successfully completed. We began collecting posted dates in early 2017. Dates from before then are estmates. All posted dates include a type attribute of Actual or Estimate.\""},{"name":"results_first_posted_date_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"disposition_first_submitted_qc_date","type":"date","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Per NLM: \"The _submitted_qc suffix indicates the submission date of the version of the record that met quality control criteria. It is common for there to be revisions between the first submission and the submission that meets qc criteria. Note this is not the date that the qc review was completed.\""},{"name":"disposition_first_posted_date","type":"date","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Per NLM: \"The _posted suffix indicates the date that a submission was made public on ClinicalTrials.gov. Typically, posting occurs the business day after qc review was successfully completed. We began collecting posted dates in early 2017. Dates from before then are estmates. All posted dates include a type attribute of Actual or Estimate.\""},{"name":"disposition_first_posted_date_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"last_update_submitted_qc_date","type":"date","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Per NLM: \"The _submitted_qc suffix indicates the submission date of the version of the record that met quality control criteria. It is common for there to be revisions between the first submission and the submission that meets qc criteria. Note this is not the date that the qc review was completed.\""},{"name":"last_update_posted_date","type":"date","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Per NLM: \"From a utility standpoint, the new <last_update_posted> date is likely the date that most people want to search. We previously did not have this date available and the old <lastchanged_date> was the closest alternative, though problematic because it never meant what was implied by the name. The _posted suffix indicates the date that a submission was made public on ClinicalTrials.gov. Typically, posting occurs the business day after qc review was successfully completed. We began collecting posted dates in early 2017. Dates from before then are estmates. All posted dates include a type attribute of Actual or Estimate.\""},{"name":"last_update_posted_date_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"start_month_year","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"The value of the start date exactly as it is provided by ClinicalTrials.gov. Some studies have only month/year defined for the start date (ie. October, 2014). That value is stored in this column and the start_date column converts this value to a date by assigning it the last day of the month."},{"name":"start_date_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"start_date","type":"date","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"The date the study started in a date-type format so that it can be used to find studies before/after/inclusive of a date or dates.  For studies that only provide month/year, the last day of the month is used."},{"name":"verification_month_year","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"The value of the verification date exactly as it is provided by ClinicalTrials.gov. Some studies have only month/year defined for the verification date (ie. October, 2014). That value is stored in this column and the verification_date column converts this value to a date by assigning it the first day of the month."},{"name":"verification_date","type":"date","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"The date the study was last verified in a date-type format so that it can be used to find studies before/after/inclusive of a date or dates.  For studies that only provide month/year, the last day of the month is used."},{"name":"completion_month_year","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"The value of the completion date exactly as it is provided by ClinicalTrials.gov. Some studies have only month/year defined for the completion date (ie. October, 2014). That value is stored in this column and the completion_date column converts this value to a date by assigning it the first day of the month."},{"name":"completion_date_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"completion_date","type":"date","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"The date the study was completed (as defined by NLM) in a date-type format so that it can be used to find studies before/after/inclusive of a date or dates.  For studies that only provide month/year, the last day of the month is used."},{"name":"primary_completion_month_year","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"The value of the primary completion date exactly as it is provided by ClinicalTrials.gov. Some studies have only month/year defined for the primary completion date (ie. October, 2014). That value is stored in this column and the primary_completion_date column converts this value to a date by assigning it the first day of the month."},{"name":"primary_completion_date_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"primary_completion_date","type":"date","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"The primary completion date for the study (as defined by NLM) in a date-type format so that it can be used to find studies before/after/inclusive of a date or dates.  For studies that only provide month/year, the last day of the month is used."},{"name":"target_duration","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"study_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"acronym","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"baseline_population","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"brief_title","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"official_title","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"overall_status","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"last_known_status","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"phase","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"enrollment","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"For Interventional Study Design, Enrollment is required by FDAAA.    For Observational Study Design, Enrollment is required by ClinicalTrials.gov (*)"},{"name":"enrollment_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"source","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"limitations_and_caveats","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"number_of_arms","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"number_of_groups","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"why_stopped","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"has_expanded_access","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"expanded_access_type_individual","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"expanded_access_type_intermediate","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"expanded_access_type_treatment","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"has_dmc","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"is_fda_regulated_drug","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"is_fda_regulated_device","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"is_unapproved_device","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"is_ppsd","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"is_us_export","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Product Manufactured in and Exported from the U.S.  Definition: Whether any drug product (including a biological product) or device product studied in the clinical study is manufactured in the United States or one of its territories and exported for study in a clinical study in another country. Select Yes/No."},{"name":"biospec_retention","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"biospec_description","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"ipd_time_frame","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"ipd_access_criteria","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"ipd_url","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"plan_to_share_ipd","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"plan_to_share_ipd_description","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"created_at","type":"datetime","nullable":false,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"(AACT assigned timestamp) Date/time the study was loaded into AACT from ClinicalTrials.gov"},{"name":"updated_at","type":"datetime","nullable":false,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"(AACT assigned timestamp) Last date/time the row was modified (At this point, this value should always be same ascreated_at)"},{"name":"source_class","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"delayed_posting","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"expanded_access_nctid","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"expanded_access_status_for_nctid","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"fdaaa801_violation","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"baseline_type_units_analyzed","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["completion_date","disposition_first_submitted_date","enrollment_type","last_known_status","last_update_submitted_date","nct_id","overall_status","phase","primary_completion_date","primary_completion_date_type","results_first_submitted_date","source","start_date","start_date_type","study_first_submitted_date","study_type"]},{"name":"baseline_counts","primary_key":"id","description":"Sample size at baseline for each study group; usually a count of participants but can represent other units of measure such as 'hands', 'hips', etc.","domain":"Results","rows_per_study":"many","row_count":"139,556","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"result_group_id","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":true,"is_nct_id":false,"description":"AACT assigned foreign key"},{"name":"ctgov_group_code","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"units","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"scope","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"count","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":[]},{"name":"baseline_measurements","primary_key":"id","description":"Summaries of demographic & baseline measures collected by arm or comparison group and for the entire population of participants in the clinical study.","domain":"Results","rows_per_study":"many","row_count":"1,447,638","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"result_group_id","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":true,"is_nct_id":false,"description":"AACT assigned foreign key"},{"name":"ctgov_group_code","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"classification","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"category","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"title","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"description","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"units","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"param_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"param_value","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"value provided as string"},{"name":"param_value_num","type":"decimal","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"value provided as decimal"},{"name":"dispersion_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"dispersion_value","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"value provided as string"},{"name":"dispersion_value_num","type":"decimal","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"value provided as decimal"},{"name":"dispersion_lower_limit","type":"decimal","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Used for reporting the lower limit of the interquartile range or full range."},{"name":"dispersion_upper_limit","type":"decimal","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Used for reporting the upper limit of the interquartile range or full range."},{"name":"explanation_of_na","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"number_analyzed","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"number_analyzed_units","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"population_description","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"calculate_percentage","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["category","classification","dispersion_type","param_type"]},{"name":"brief_summaries","primary_key":"id","description":"A single text column that provides a brief description of the study.","domain":"Protocol","rows_per_study":"one","row_count":"374,770","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"description","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":[]},{"name":"browse_conditions","primary_key":"id","description":"NLM uses an internal algorithm to assess the data entered for a study and creates a list of standard MeSH terms that describe the condition(s) being addressed by the clinical trial.  This table provides the results of NLM's assessment","domain":"Protocol","rows_per_study":"many","row_count":"633,066","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"mesh_term","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Condition MeSH terms generated by NLM algorithm"},{"name":"downcase_mesh_term","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"N/A default to mesh"},{"name":"mesh_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Indicates the level of the MeSH term within the hierarchy"}],"indexes":["downcase_mesh_term","mesh_term","nct_id"]},{"name":"browse_interventions","primary_key":"id","description":"NLM uses an internal algorithm to assess the data entered for a study and creates a list of standard MeSH terms that describe the intervention(s) being addressed by the clinical trial.  This table provides the results of NLM's assessment","domain":"Protocol","rows_per_study":"many","row_count":"255,332","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"mesh_term","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Intervention MeSH terms generated by NLM algorithm"},{"name":"downcase_mesh_term","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"N/A default to mesh"},{"name":"mesh_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Indicates the level of the MeSH term within the hierarchy"}],"indexes":["downcase_mesh_term","mesh_term","nct_id"]},{"name":"calculated_values","primary_key":"id","description":"An AACT-provided table that contains info that's been calculated from the information received from ClinicalTrials.gov.  For example, number_of_facilities and actual_duration are provided in this table.","domain":"Protocol","rows_per_study":"one","row_count":"375,612","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"number_of_facilities","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"count number of related facility rows"},{"name":"number_of_nsae_subjects","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"count number of related non-serious event rows"},{"name":"number_of_sae_subjects","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"count number of related serious event rows"},{"name":"registered_in_calendar_year","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Year value of first_received_date which represents the year in which the study was registered"},{"name":"nlm_download_date","type":"date","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Date NLM made study available via their API."},{"name":"actual_duration","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Number of months between start_date & primary_completion_date"},{"name":"were_results_reported","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Set to true if clinical_results exist"},{"name":"months_to_report_results","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Number of months between primary_completion_date & first_received_results_date"},{"name":"has_us_facility","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Set to true if the study has at least one facility in the USA. It is possible that some studies with sites in the USA will not be set to true if the study has not identified the facilities."},{"name":"has_single_facility","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Set to true if the study has just one facility"},{"name":"minimum_age_num","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"convert minimum age to an integer"},{"name":"maximum_age_num","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"convert maximum age to an integer"},{"name":"minimum_age_unit","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"part of minimum age info that specifies units"},{"name":"maximum_age_unit","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"part of maximum age info that specifies units"},{"name":"number_of_primary_outcomes_to_measure","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"count number of primary outcomes that the investigator intends to measure"},{"name":"number_of_secondary_outcomes_to_measure","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"count number of secondary outcomes that the investigator intends to measure"},{"name":"number_of_other_outcomes_to_measure","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"count number of other outcomes that the investigator intends to measure"}],"indexes":["actual_duration","months_to_report_results","number_of_facilities"]},{"name":"central_contacts","primary_key":"id","description":"Contact info for people (primary & backup) who can answer questions concerning enrollment at any location of the study.","domain":"Protocol","rows_per_study":"many","row_count":"147,806","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"contact_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":" 'backup' if value from <overall_contact_backup>\n'regular' if value from <overall_contact>"},{"name":"name","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"phone","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"email","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"phone_extension","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"role","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["contact_type"]},{"name":"conditions","primary_key":"id","description":"Name(s) of the disease(s) or condition(s) studied in the clinical study, or the focus of the clinical study. Can include NLM's Medical Subject Heading (MeSH)-controlled vocabulary terms.","domain":"Protocol","rows_per_study":"many","row_count":"636,557","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"name","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"downcase_name","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["downcase_name","name"]},{"name":"countries","primary_key":"id","description":"Countries in which the study has facilities/sites.","domain":"Protocol","rows_per_study":"many","row_count":"530,128","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"name","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"removed","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"True if value from removed_countries"}],"indexes":[]},{"name":"design_group_interventions","primary_key":"id","description":"A cross reference for groups/interventions.  If a study has multiple groups and multiple interventions, this table shows which interventions are associated with which groups.","domain":"Protocol","rows_per_study":"many","row_count":"820,143","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"design_group_id","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":true,"is_nct_id":false,"description":"AACT assigned foreign key"},{"name":"intervention_id","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":true,"is_nct_id":false,"description":"AACT assigned foreign key"}],"indexes":["design_group_id","intervention_id"]},{"name":"design_groups","primary_key":"id","description":"Defines the protocol-specified group, subgroup, or cohort of participants in a clinical trial assigned to receive specific intervention(s) or observations according to a protocol.","domain":"Protocol","rows_per_study":"many","row_count":"668,350","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"group_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"title","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"This tag is available only of those studies that have results and indicates the date when the results were first received.  This field captures the arm label or the group cohort label for the records coming from study tables, and arm/group title for the results tables. "},{"name":"description","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["group_type"]},{"name":"design_outcomes","primary_key":"id","description":"Description of planned outcome measures and observations that will describe patterns of diseases and traits/associations with exposures, risk factors or treatment.","domain":"Protocol","rows_per_study":"many","row_count":"2,088,215","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"outcome_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"primary' if value from <primary_outcome>\n'secondary' if value from <secondary_outcome>"},{"name":"measure","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"time_frame","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"population","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"description","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["measure","outcome_type"]},{"name":"designs","primary_key":"id","description":"Description of how the study will be conducted, including comparison group design and strategies for masking and allocating participants.","domain":"Protocol","rows_per_study":"one","row_count":"375,612","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"allocation","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"intervention_model","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"observational_model","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"primary_purpose","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"time_perspective","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"masking","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"masking_description","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"intervention_model_description","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"subject_masked","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Parse content of 'Masking:' section. If it includes  'Subject' set to true"},{"name":"caregiver_masked","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Parse content of 'Masking:' section. If it includes  'Caregiver' set to true"},{"name":"investigator_masked","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Parse content of 'Masking:' section. If it includes  'Investigator' set to true"},{"name":"outcomes_assessor_masked","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Parse content of 'Masking:' section. If it includes  'Outcomes_Assessor' set to true"}],"indexes":["caregiver_masked","investigator_masked","masking","outcomes_assessor_masked","subject_masked"]},{"name":"detailed_descriptions","primary_key":"id","description":"A single text column that provides a detailed description of the study protocol.","domain":"Protocol","rows_per_study":"one","row_count":"249,571","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"description","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":[]},{"name":"documents","primary_key":"id","description":"The full study protocol and statistical analysis plan must be uploaded as part of results information submission, for studies with a Primary Completion Date on or after January 18, 2017. The protocol and statistical analysis plan may be optionally uploaded before results information submission and updated with new versions, as needed. Informed consent forms may optionally be uploaded at any time.","domain":"Results","rows_per_study":"many","row_count":"9,733","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"document_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"document_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"url","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"comment","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["document_id","document_type"]},{"name":"drop_withdrawals","primary_key":"id","description":"Summarized information about how many participants withdrew from the study, when and why. This information explains disposition of participants relative to the numbers starting and completing the study (enumerated in the Milestones table).","domain":"Results","rows_per_study":"many","row_count":"357,711","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"result_group_id","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":true,"is_nct_id":false,"description":"AACT assigned foreign key"},{"name":"ctgov_group_code","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"period","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"reason","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"count","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"drop_withdraw_comment","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"reason_comment","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"count_units","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["period"]},{"name":"eligibilities","primary_key":"id","description":"Information about the criteria used to select participants; includes inclusion and exclusion criteria","domain":"Protocol","rows_per_study":"one","row_count":"375,612","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"sampling_method","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"gender","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"minimum_age","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"maximum_age","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"healthy_volunteers","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"population","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"criteria","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"gender_description","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"gender_based","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"adult","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"child","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"older_adult","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["gender","healthy_volunteers","maximum_age","minimum_age"]},{"name":"facilities","primary_key":"id","description":"Name, address and recruiting status of the facilities participating in the study.","domain":"Protocol","rows_per_study":"many","row_count":"2,494,726","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"status","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"name","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"city","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"state","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"zip","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"country","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["city","country","name","state","status"]},{"name":"facility_contacts","primary_key":"id","description":"Contact information for people responsible for the study at each facility. (primary and backup)  Facility contact information is available if the facility status (Facilities.Status) is \u2018Recruiting\u2019 or \u2018Not yet recruiting\u2019, and if the data provider has provided such information. Contact information is removed from the publicly available content at ClinicalTrials.gov when the facility is no longer recruiting, or when the overall study status (Studies.Overall_status) changes to indicate that the study has completed recruitment.","domain":"Protocol","rows_per_study":"many","row_count":"334,112","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"facility_id","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":true,"is_nct_id":false,"description":"AACT assigned foreign key"},{"name":"contact_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"primary' if from <contact>\n'backup' if from <contact_backup>\n"},{"name":"name","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"email","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"phone","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"phone_extension","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["contact_type"]},{"name":"facility_investigators","primary_key":"id","description":"Names of the investigators at each study facility.  Facility investigator information is available if the facility status (Facilities.Status) is \u2018Recruiting\u2019 or \u2018Not yet recruiting\u2019, and if the data provider has provided such information. Investigator information is removed from the publicly available content at ClinicalTrials.gov when the facility is no longer recruiting, or when the overall study status (Studies.Overall_status) changes to indicate that the study has completed recruitment.","domain":"Protocol","rows_per_study":"many","row_count":"224,737","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"facility_id","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":true,"is_nct_id":false,"description":"AACT assigned foreign key"},{"name":"role","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"name","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":[]},{"name":"id_information","primary_key":"id","description":"Identifiers (other than the NCT ID) that uniquely identify the study such as that assigned by the sponsor, or an NCT ID that had previously been used for the study.","domain":"Protocol","rows_per_study":"many","row_count":"506,342","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"id_source","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"id_value","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"id_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"org_study_id' if value from <org_study_id>\n'secondary_id' if value  from <secondary_id>\n'nct_id' if value  from <nct_id>\n'nct_alias' if value  from <nct_alias>"},{"name":"id_type_description","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"id_link","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["id_source"]},{"name":"intervention_other_names","primary_key":"id","description":"Terns or phrases that are synonymous with an intervention.  (Each row is linked to one of the interventions associated with the study.)","domain":"Protocol","rows_per_study":"many","row_count":"326,707","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"intervention_id","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":true,"is_nct_id":false,"description":"AACT assigned foreig"},{"name":"name","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":[]},{"name":"interventions","primary_key":"id","description":"The interventions or exposures (including drugs, medical devices, procedures, vaccines, and other products) of interest to the study, or associated with study arms/groups.","domain":"Protocol","rows_per_study":"many","row_count":"643,512","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"intervention_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"name","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"description","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["intervention_type"]},{"name":"ipd_information_types","primary_key":"id","description":"","domain":"","rows_per_study":"","row_count":"","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"name","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":[]},{"name":"keywords","primary_key":"id","description":"Provides words or phrases that best describe the protocol. Keywords help users find studies in the database. Can include NLM's Medical Subject Heading (MeSH)-controlled vocabulary terms.","domain":"Protocol","rows_per_study":"many","row_count":"1,012,626","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"name","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"downcase_name","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"N/A"}],"indexes":["downcase_name","name"]},{"name":"links","primary_key":"id","description":"Web site directly relevant to the protocol.  (ie, links to educational, research, government, and other non-profit Web pages)","domain":"Protocol","rows_per_study":"many","row_count":"56,669","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"url","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"description","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":[]},{"name":"milestones","primary_key":"id","description":"Information summarizing the progress of participants through each stage of a study, including the number of participants who started and completed the trial. Enumeration of participants not completing the study is included in the Drop_Withdrawals table.","domain":"Results","rows_per_study":"many","row_count":"511,104","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"result_group_id","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":true,"is_nct_id":false,"description":"AACT assigned foreign key"},{"name":"ctgov_group_code","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"title","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"period","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"description","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"count","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"milestone_description","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"count_units","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["period"]},{"name":"outcome_analyses","primary_key":"id","description":"Results of scientifically appropriate statistical analyses performed on primary and secondary study outcomes. Includes results for treatment effect estimates, confidence intervals and othe rmeasures of dispersion, and p-values.","domain":"Results","rows_per_study":"many","row_count":"~300,000","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"outcome_id","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":true,"is_nct_id":false,"description":"AACT assigned foreign key"},{"name":"non_inferiority_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"non_inferiority_description","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"param_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"param_value","type":"decimal","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"dispersion_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"dispersion_value","type":"decimal","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"p_value_modifier","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"The p-value modifier: typically a less than or greater than sign"},{"name":"p_value","type":"float","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Just the numeric part of the value provided - to 6-decimal place precision "},{"name":"ci_n_sides","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"ci_percent","type":"decimal","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"ci_lower_limit","type":"decimal","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"ci_upper_limit","type":"decimal","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"ci_upper_limit_na_comment","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"p_value_description","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"method","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"method_description","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"estimate_description","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"groups_description","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"other_analysis_description","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["dispersion_type","param_type"]},{"name":"outcome_analysis_groups","primary_key":"id","description":"Identifies the comparison groups that were involved with each outcome analysis","domain":"Results","rows_per_study":"many","row_count":"Identifies the comparison groups that were involved with each outcome analysis","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"outcome_analysis_id","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":true,"is_nct_id":false,"description":"AACT assigned foreign key"},{"name":"result_group_id","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":true,"is_nct_id":false,"description":"AACT assigned foreign key"},{"name":"ctgov_group_code","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":[]},{"name":"outcome_counts","primary_key":"id","description":"Sample size included in analysis for each outcome for each study group; usually participants but can represent other units of measure such as eyes 'lesions', etc.","domain":"Results","rows_per_study":"many","row_count":"Sample size included in analysis for each outcome for each study group; usually participants but can represent other units of measure such as eyes 'lesions', etc.","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"outcome_id","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":true,"is_nct_id":false,"description":"AACT assigned foreign key"},{"name":"result_group_id","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":true,"is_nct_id":false,"description":"AACT assigned foreign key"},{"name":"ctgov_group_code","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"scope","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"units","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"count","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":[]},{"name":"outcome_measurements","primary_key":"id","description":"Summary data for primary and secondary outcome measures for each study group. Includes parameter estimates and measures of dispersion/precision.","domain":"Results","rows_per_study":"many","row_count":"~2,000,000","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"outcome_id","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":true,"is_nct_id":false,"description":"AACT assigned foreign key"},{"name":"result_group_id","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":true,"is_nct_id":false,"description":"AACT assigned foreign key"},{"name":"ctgov_group_code","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"classification","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"category","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"title","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"A concise name for the specific measure that will be used to determine the effect of the intervention(s) or, for observational studies. "},{"name":"description","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"units","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"param_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"param_value","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Required if the outcome measure is continuous (e.g. blood pressure)"},{"name":"param_value_num","type":"decimal","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Created as a varchar dataype in order to store possible non-numeric values."},{"name":"dispersion_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"dispersion_value","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":" "},{"name":"dispersion_value_num","type":"decimal","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"dispersion_lower_limit","type":"decimal","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Used for reporting the lower limit of the interquartile range or full range."},{"name":"dispersion_upper_limit","type":"decimal","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Used for reporting the upper limit of the interquartile range or full range."},{"name":"explanation_of_na","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["category","classification","dispersion_type"]},{"name":"outcomes","primary_key":"id","description":"Descriptions of outcomes, or observation that were measured to determine patterns of diseases or traits, or associations with exposures, risk factors, or treatment. Includes information such as time frame, population and units.  (Specific measurement results are stored in the Outcome_Measurements table.)","domain":"Results","rows_per_study":"many","row_count":"~400,000","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"outcome_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"title","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"description","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"time_frame","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"population","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"anticipated_posting_date","type":"date","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"This is the date-type value of anticipated_posting_month_year.  The last day of the month is used as the 'day'."},{"name":"anticipated_posting_month_year","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"A study may have records in the Outcomes table but no corresponding records in either the Outcome_Measures or Otucome_Counts table.  These may be studies that have indicated which outcome measures they will provide results for, but have not yet posted the final results for these measures.  For these studies and outcome measures the value of anticipated_posting_date indicates the anticipated date when results will be provided."},{"name":"units","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"units_analyzed","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"dispersion_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"param_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["dispersion_type","param_type"]},{"name":"overall_officials","primary_key":"id","description":"People responsible for the overall scientific leadership of the protocol including the principal investigator.","domain":"Protocol","rows_per_study":"many","row_count":"People responsible for the overall scientific leadership of the protocol including the principal investigator.","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"role","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"name","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"affiliation","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["affiliation","nct_id"]},{"name":"participant_flows","primary_key":"id","description":"Recruitment information relevant to the recruitment process & pre-assignment details (ie. significant events in the study that occur after participant enrollment, but prior to assignment of participants).  Information about participant flow that applies to all milestones.","domain":"Results","rows_per_study":"one","row_count":"Recruitment information relevant to the recruitment process & pre-assignment details (ie. significant events in the study that occur after participant enrollment, but prior to assignment of participants).  Information about participant flow that applies to all milestones.","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"recruitment_details","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"pre_assignment_details","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"units_analyzed","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":[]},{"name":"pending_results","primary_key":"id","description":"Provides information about events related to the submission of study results for quality control (QC) review before the results are publicly posted.  Events reported: submissions, cancellations and returns for modifications.  'Unknown' is specified for cancellations that occurred before 05/08/2018 (when this data began being collected).\n\nWhen a study passes quality control review: 1) results_first_submitted_date is set to the study's first submission date, 2) results_first_submitted_qc_date is set to the submission date of the version of results that passed QC, 3) the study's pending_results rows are removed, and 4) the results are posted on ClinicalTrials.gov. \n\nThe latest versions of all studies are posted every business day but, there can be unexpected delays.  The results_first_posted_date value will usually  be identified as an 'Estimate' when first posted.  This will switch to 'Actual' (and the date may be adjusted) on the next posting cycle, when the true posting date is known.","domain":"Results","rows_per_study":"many","row_count":"Provides information about events related to the submission of study results for quality control (QC) review before the results are publicly posted.  Events reported: submissions, cancellations and returns for modifications.  'Unknown' is specified for cancellations that occurred before 05/08/2018 (when this data began being collected).\n\nWhen a study passes quality control review: 1) results_first_submitted_date is set to the study's first submission date, 2) results_first_submitted_qc_date is set to the submission date of the version of results that passed QC, 3) the study's pending_results rows are removed, and 4) the results are posted on ClinicalTrials.gov. \n\nThe latest versions of all studies are posted every business day but, there can be unexpected delays.  The results_first_posted_date value will usually  be identified as an 'Estimate' when first posted.  This will switch to 'Actual' (and the date may be adjusted) on the next posting cycle, when the true posting date is known.","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"event","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Uses the tag label to identify the type of event this row represents"},{"name":"event_date_description","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"The value might be 'Unknown', so a date description (string-type) column is provided to capture this."},{"name":"event_date","type":"date","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Convert the value to a date-type."}],"indexes":[]},{"name":"provided_documents","primary_key":"id","description":"The full study protocol and statistical analysis plan must be uploaded as part of results information submission, for studies with a Primary Completion Date on or after January 18, 2017. The protocol and statistical analysis plan may be optionally uploaded before results information submission and updated with new versions, as needed. Informed consent forms may optionally be uploaded at any time.","domain":"Results","rows_per_study":"many","row_count":"The full study protocol and statistical analysis plan must be uploaded as part of results information submission, for studies with a Primary Completion Date on or after January 18, 2017. The protocol and statistical analysis plan may be optionally uploaded before results information submission and updated with new versions, as needed. Informed consent forms may optionally be uploaded at any time.\u00a0","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"document_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"has_protocol","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"has_icf","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"has_sap","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"document_date","type":"date","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"url","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":[]},{"name":"reported_event_totals","primary_key":"id","description":"","domain":"","rows_per_study":"","row_count":"","columns":[{"name":"nct_id","type":"string","nullable":false,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"ctgov_group_code","type":"string","nullable":false,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Code to connect to results"},{"name":"event_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Indicates the type of event (options are \"Serious\", \"Other\" and \"Deaths\")"},{"name":"classification","type":"string","nullable":false,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Further explanation of the type of total"},{"name":"subjects_affected","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Number of subjects affected by the event"},{"name":"subjects_at_risk","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Number of subjects that were at risk of being affected by the event"},{"name":"created_at","type":"datetime","nullable":false,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"updated_at","type":"datetime","nullable":false,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":[]},{"name":"reported_events","primary_key":"id","description":"Summary information about reported adverse events (any untoward or unfavorable medical occurrence to participants, including abnormal physical exams, laboratory findings, symptoms, or diseases), including serious adverse events, other adverse events, and mortality.","domain":"Results","rows_per_study":"many","row_count":"~3,000,000","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"result_group_id","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":true,"is_nct_id":false,"description":"AACT assigned foreign key"},{"name":"ctgov_group_code","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"time_frame","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"event_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"serious' if data from <serious_events>\n'other' if data from <other_events>"},{"name":"default_vocab","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"default_assessment","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"subjects_affected","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"subjects_at_risk","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"description","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"event_count","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"organ_system","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"adverse_event_term","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"frequency_threshold","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"vocab","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"assessment","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["event_type","subjects_affected"]},{"name":"responsible_parties","primary_key":"id","description":"People who have access to and control over the data from the study, have the right to publish study results, and have the ability to meet all of the requirements for the submission of study information.","domain":"Protocol","rows_per_study":"many","row_count":"People who have access to and control over the data from the study, have the right to publish study results, and have the ability to meet all of the requirements for the submission of study information. ","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"responsible_party_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"This data element was introduced by ClinicalTrials.gov in August 2011."},{"name":"name","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"title","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"This data element was introduced by ClinicalTrials.gov in August 2011 and is required if either Principal Investigator or Sponsor-Investigator is selected for the responsible_party_type."},{"name":"organization","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"This data element was introduced in November 2007 and discontinued in August 2011. "},{"name":"affiliation","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"old_name_title","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["nct_id","organization","responsible_party_type"]},{"name":"result_agreements","primary_key":"id","description":"Info about whether an agreement exists between the sponsor & the principal investigators (PIs) that restricts the PIs ability to discuss study results at scientific meetings or other public or private forums, or to publish info concerning the study in scientific or academic journals after the study is completed.","domain":"Results","rows_per_study":"many","row_count":"Info about whether an agreement exists between the sponsor & the principal investigators (PIs) that restricts the PIs ability to discuss study results at scientific meetings or other public or private forums, or to publish info concerning the study in scientific or academic journals after the study is completed.","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"pi_employee","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"NLM data dictionary reports this as Yes/No, but data actually stored as an affirmative statement or a negative statement as indicated in the enumerations tab.  Studies with a negative value for this variable provide information about any results disclosure restrictions on PI(s). This information is captured in the RESTRICTIVE_AGREEMENT variable in the RESULTS_RESTRICTION_AGREEMENTS table."},{"name":"agreement","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"If the user answers \u201cN\u201d to the question about Results Disclosure Restriction on PI(s), or negatively whether all PI(s) are employees of the sponsor, the field contains the statement, \"There is NOT an agreement between the sponsor (or its agents) that restricts the PI's rights to discuss or publish trial results after the trial is completed.\""},{"name":"restriction_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Indicates the type of restriction if the agreement is restrictive"},{"name":"other_details","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Contains the additional details of note regarding the agreement"},{"name":"restrictive_agreement","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Indicates if the agreement is restrictive or not"}],"indexes":[]},{"name":"result_contacts","primary_key":"id","description":"Point of contact for scientific information about the clinical study results information.","domain":"Results","rows_per_study":"many","row_count":"Point of contact for scientific information about the clinical study results information.\u00a0","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"organization","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"name","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"phone","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"email","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"extension","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["organization"]},{"name":"result_groups","primary_key":"id","description":"Consolidated, aggregate list of group titles/descriptions used for reporting summary results information.","domain":"Results","rows_per_study":"many","row_count":"~1,500,000","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"ctgov_group_code","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"result_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"Derived from XML tag: 'Baseline', 'Outcome', 'Reported Event', or 'Participant Flow' "},{"name":"title","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"description","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["result_type"]},{"name":"retractions","primary_key":"id","description":"","domain":"","rows_per_study":"","row_count":"","columns":[{"name":"reference_id","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":true,"is_nct_id":false,"description":""},{"name":"pmid","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"source","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":""}],"indexes":[]},{"name":"search_results","primary_key":"id","description":"This joins studies with saved queries withing the study_searches table","domain":"n/a","rows_per_study":"many","row_count":"This joins studies with saved queries withing the study_searches table","columns":[{"name":"nct_id","type":"string","nullable":false,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"name","type":"string","nullable":false,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"short name of the study_search this object belongs to"},{"name":"created_at","type":"datetime","nullable":false,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"updated_at","type":"datetime","nullable":false,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"grouping","type":"string","nullable":false,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"category the object is grouped under"},{"name":"study_search_id","type":"integer","nullable":true,"is_primary_key":false,"is_foreign_key":true,"is_nct_id":false,"description":"connects the object to the study_search that pulled it up"}],"indexes":["nct_id","nct_id"]},{"name":"sponsors","primary_key":"id","description":"Name of study sponsors and collaborators. The sponsor is the entity or individual initiating the study. Collaborators are other organizations providing support, including funding, design, implementation, data analysis, and reporting.","domain":"Protocol","rows_per_study":"many","row_count":"~600,000","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"agency_class","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"NLM derived value that indicates the broad catergory of sponsor"},{"name":"lead_or_collaborator","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"lead' if value from <lead_sponsor>\n'collaborator' ifvalue from <collaborator>"},{"name":"name","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["agency_class","name"]},{"name":"study_references","primary_key":"id","description":"Citations to publications related to the study protocol and/or results. Includes PubMed Unique Identifier (PMID) and/or full bibliographic citation.","domain":"Protocol","rows_per_study":"many","row_count":"Citations to publications related to the study protocol and/or results. Includes PubMed Unique Identifier (PMID) and/or full bibliographic citation.\u00a0","columns":[{"name":"nct_id","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":true,"description":"AACT foreign key to Study"},{"name":"pmid","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"reference_type","type":"string","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"reference' if value from <results>\n'results_reference' if value from <results_reference>"},{"name":"citation","type":"text","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["reference_type"]},{"name":"study_searches","primary_key":"id","description":"These are saved queries that are used to search ClinicalTrials.gov","domain":"n/a","rows_per_study":"none","row_count":"These are saved queries that are used to search ClinicalTrials.gov","columns":[{"name":"save_tsv","type":"boolean","nullable":false,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"indicates if a tsv should be made for the search_results"},{"name":"query","type":"string","nullable":false,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"query used to search ClinicalTrials.gov"},{"name":"grouping","type":"string","nullable":false,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"category the object is grouped under"},{"name":"name","type":"string","nullable":false,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"short name"},{"name":"beta_api","type":"boolean","nullable":false,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":"indicates if the search should be done using the ClinicalTrials.gov beta api or not"},{"name":"created_at","type":"datetime","nullable":false,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"updated_at","type":"datetime","nullable":false,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""},{"name":"active","type":"boolean","nullable":true,"is_primary_key":false,"is_foreign_key":false,"is_nct_id":false,"description":""}],"indexes":["query"]}],"foreign_keys":[{"child_table":"baseline_counts","parent_table":"result_groups","child_column":"result_group_id","parent_column":"id"},{"child_table":"baseline_counts","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"baseline_measurements","parent_table":"result_groups","child_column":"result_group_id","parent_column":"id"},{"child_table":"baseline_measurements","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"brief_summaries","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"browse_conditions","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"browse_interventions","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"calculated_values","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"central_contacts","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"conditions","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"countries","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"design_group_interventions","parent_table":"design_groups","child_column":"design_group_id","parent_column":"id"},{"child_table":"design_group_interventions","parent_table":"interventions","child_column":"intervention_id","parent_column":"id"},{"child_table":"design_group_interventions","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"design_groups","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"design_outcomes","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"designs","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"detailed_descriptions","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"documents","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"drop_withdrawals","parent_table":"result_groups","child_column":"result_group_id","parent_column":"id"},{"child_table":"drop_withdrawals","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"eligibilities","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"facilities","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"facility_contacts","parent_table":"facilities","child_column":"facility_id","parent_column":"id"},{"child_table":"facility_contacts","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"facility_investigators","parent_table":"facilities","child_column":"facility_id","parent_column":"id"},{"child_table":"facility_investigators","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"id_information","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"intervention_other_names","parent_table":"interventions","child_column":"intervention_id","parent_column":"id"},{"child_table":"intervention_other_names","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"interventions","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"ipd_information_types","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"keywords","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"links","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"milestones","parent_table":"result_groups","child_column":"result_group_id","parent_column":"id"},{"child_table":"milestones","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"outcome_analyses","parent_table":"outcomes","child_column":"outcome_id","parent_column":"id"},{"child_table":"outcome_analyses","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"outcome_analysis_groups","parent_table":"outcome_analyses","child_column":"outcome_analysis_id","parent_column":"id"},{"child_table":"outcome_analysis_groups","parent_table":"result_groups","child_column":"result_group_id","parent_column":"id"},{"child_table":"outcome_analysis_groups","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"outcome_counts","parent_table":"outcomes","child_column":"outcome_id","parent_column":"id"},{"child_table":"outcome_counts","parent_table":"result_groups","child_column":"result_group_id","parent_column":"id"},{"child_table":"outcome_counts","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"outcome_measurements","parent_table":"outcomes","child_column":"outcome_id","parent_column":"id"},{"child_table":"outcome_measurements","parent_table":"result_groups","child_column":"result_group_id","parent_column":"id"},{"child_table":"outcome_measurements","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"outcomes","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"overall_officials","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"participant_flows","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"pending_results","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"provided_documents","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"reported_event_totals","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"reported_events","parent_table":"result_groups","child_column":"result_group_id","parent_column":"id"},{"child_table":"reported_events","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"responsible_parties","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"result_agreements","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"result_contacts","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"result_groups","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"retractions","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"search_results","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"sponsors","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"},{"child_table":"study_references","parent_table":"studies","child_column":"nct_id","parent_column":"nct_id"}]};
+
+let state = {
+  tables: SCHEMA.tables,
+  foreignKeys: SCHEMA.foreign_keys,
+  selectedTable: null,
+  hoveredTable: null,
+  filter: 'all',
+  searchQuery: '',
+  showNctEdges: false,
+  view: 'graph',
+  nodes: [],
+  edges: [],
+  transform: { x: 0, y: 0, scale: 1 },
+  dragging: null,
+  dragMoved: false,
+  panning: false,
+  panStart: { x: 0, y: 0 }
+};
+
+let canvas, ctx;
+let simAlpha = 1;
+let simTick = 0;
+
+function init() {
+  buildGraph();
+  renderTableList();
+  setupCanvas();
+  setupSearch();
+  setupFilters();
+  updateStats();
+  
+  // Run simulation for a bit then fit
+  for (let i = 0; i < 200; i++) simulate();
+  simAlpha = 0.01;
+  
+  requestAnimationFrame(animate);
+  setTimeout(fitAll, 100);
+}
+
+function buildGraph() {
+  const tables = state.tables;
+  const fks = state.foreignKeys;
+  const tableIndex = {};
+  tables.forEach((t, i) => tableIndex[t.name] = i);
+  
+  const studiesIdx = tableIndex['studies'];
+  const cx = 0, cy = 0;
+  
+  // BFS depth from studies
+  const depth = new Array(tables.length).fill(-1);
+  if (studiesIdx !== undefined) depth[studiesIdx] = 0;
+  
+  // Non-nct adjacency
+  const adj = Array.from({length: tables.length}, () => []);
+  fks.forEach(fk => {
+    if (fk.child_column === 'nct_id') return;
+    const ci = tableIndex[fk.child_table];
+    const pi = tableIndex[fk.parent_table];
+    if (ci !== undefined && pi !== undefined) {
+      adj[ci].push(pi);
+      adj[pi].push(ci);
+    }
+  });
+  
+  // BFS from studies via nct_id first
+  const queue = [];
+  if (studiesIdx !== undefined) queue.push(studiesIdx);
+  fks.forEach(fk => {
+    if (fk.child_column === 'nct_id') {
+      const ci = tableIndex[fk.child_table];
+      if (ci !== undefined && depth[ci] === -1) {
+        depth[ci] = 1;
+        queue.push(ci);
+      }
+    }
+  });
+  
+  while (queue.length > 0) {
+    const curr = queue.shift();
+    for (const next of adj[curr]) {
+      if (depth[next] === -1) {
+        depth[next] = depth[curr] + 1;
+        queue.push(next);
+      }
+    }
+  }
+  tables.forEach((t, i) => { if (depth[i] === -1) depth[i] = 2; });
+  
+  // Group by depth for ring layout
+  const rings = {};
+  tables.forEach((t, i) => {
+    const d = depth[i];
+    if (!rings[d]) rings[d] = [];
+    rings[d].push(i);
+  });
+  
+  state.nodes = tables.map((t, i) => {
+    const d = depth[i];
+    const ring = rings[d] || [i];
+    const idx = ring.indexOf(i);
+    const count = ring.length;
+    const angle = (2 * Math.PI * idx / count) - Math.PI / 2;
+    const radius = d === 0 ? 0 : 150 + d * 120;
+    
+    let color;
+    if (t.domain === 'Protocol') color = '#3b82f6';
+    else if (t.domain === 'Results') color = '#f97316';
+    else if (t.domain === 'Protocol & Results') color = '#8b5cf6';
+    else color = '#6b7280';
+    
+    const size = t.name === 'studies' ? 30 : 
+                 (t.columns.length > 15 ? 20 : t.columns.length > 8 ? 16 : 13);
+    
+    return {
+      x: cx + Math.cos(angle) * radius,
+      y: cy + Math.sin(angle) * radius,
+      vx: 0, vy: 0,
+      table: t, color, size,
+      visible: true, highlighted: false
+    };
+  });
+  
+  state.edges = fks.map(fk => {
+    const si = tableIndex[fk.child_table];
+    const ti = tableIndex[fk.parent_table];
+    return {
+      source: si !== undefined ? si : -1,
+      target: ti !== undefined ? ti : -1,
+      fk, isNct: fk.child_column === 'nct_id',
+      visible: fk.child_column !== 'nct_id'
+    };
+  }).filter(e => e.source >= 0 && e.target >= 0);
+}
+
+function setupCanvas() {
+  canvas = document.getElementById('graph-canvas');
+  ctx = canvas.getContext('2d');
+  
+  function resize() {
+    const container = document.getElementById('canvas-container');
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = container.clientWidth * dpr;
+    canvas.height = container.clientHeight * dpr;
+    canvas.style.width = container.clientWidth + 'px';
+    canvas.style.height = container.clientHeight + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+  
+  canvas.addEventListener('mousedown', onMouseDown);
+  canvas.addEventListener('mousemove', onMouseMove);
+  canvas.addEventListener('mouseup', onMouseUp);
+  canvas.addEventListener('mouseleave', onMouseUp);
+  canvas.addEventListener('wheel', onWheel, {passive: false});
+}
+
+function screenToWorld(sx, sy) {
+  return {
+    x: (sx - state.transform.x) / state.transform.scale,
+    y: (sy - state.transform.y) / state.transform.scale
+  };
+}
+
+function findNodeAt(sx, sy) {
+  const w = screenToWorld(sx, sy);
+  for (let i = state.nodes.length - 1; i >= 0; i--) {
+    const n = state.nodes[i];
+    if (!n.visible) continue;
+    const dx = w.x - n.x, dy = w.y - n.y;
+    const r = n.size + 8;
+    if (dx * dx + dy * dy < r * r) return i;
+  }
+  return -1;
+}
+
+function onMouseDown(e) {
+  const rect = canvas.getBoundingClientRect();
+  const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+  const nodeIdx = findNodeAt(sx, sy);
+  if (nodeIdx >= 0) {
+    state.dragging = nodeIdx;
+    state.dragMoved = false;
+    simAlpha = Math.max(simAlpha, 0.3);
+  } else {
+    state.panning = true;
+    state.panStart = { x: e.clientX - state.transform.x, y: e.clientY - state.transform.y };
+    canvas.style.cursor = 'grabbing';
+  }
+}
+
+function onMouseMove(e) {
+  const rect = canvas.getBoundingClientRect();
+  const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+  
+  if (state.dragging !== null) {
+    state.dragMoved = true;
+    const w = screenToWorld(sx, sy);
+    state.nodes[state.dragging].x = w.x;
+    state.nodes[state.dragging].y = w.y;
+    state.nodes[state.dragging].vx = 0;
+    state.nodes[state.dragging].vy = 0;
+  } else if (state.panning) {
+    state.transform.x = e.clientX - state.panStart.x;
+    state.transform.y = e.clientY - state.panStart.y;
+  } else {
+    const nodeIdx = findNodeAt(sx, sy);
+    if (nodeIdx >= 0) {
+      state.hoveredTable = nodeIdx;
+      canvas.style.cursor = 'pointer';
+      showTooltip(e.clientX, e.clientY, state.nodes[nodeIdx].table);
+    } else {
+      state.hoveredTable = null;
+      canvas.style.cursor = 'grab';
+      hideTooltip();
+    }
+  }
+}
+
+function onMouseUp(e) {
+  if (state.dragging !== null && !state.dragMoved) {
+    selectTable(state.nodes[state.dragging].table.name);
+  }
+  state.dragging = null;
+  if (state.panning) {
+    state.panning = false;
+    canvas.style.cursor = 'grab';
+  }
+  hideTooltip();
+}
+
+function onWheel(e) {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+  const delta = e.deltaY > 0 ? 0.92 : 1.08;
+  const newScale = Math.max(0.05, Math.min(6, state.transform.scale * delta));
+  state.transform.x = sx - (sx - state.transform.x) * (newScale / state.transform.scale);
+  state.transform.y = sy - (sy - state.transform.y) * (newScale / state.transform.scale);
+  state.transform.scale = newScale;
+}
+
+function simulate() {
+  if (simAlpha < 0.001) return;
+  simAlpha *= 0.99;
+  simTick++;
+  
+  const nodes = state.nodes;
+  const edges = state.edges;
+  const n = nodes.length;
+  
+  // Repulsion - weaker, shorter range
+  for (let i = 0; i < n; i++) {
+    if (!nodes[i].visible) continue;
+    for (let j = i + 1; j < n; j++) {
+      if (!nodes[j].visible) continue;
+      let dx = nodes[j].x - nodes[i].x;
+      let dy = nodes[j].y - nodes[i].y;
+      let dist2 = dx * dx + dy * dy;
+      if (dist2 > 250000) continue; // Skip if too far (500px)
+      let dist = Math.sqrt(dist2) || 1;
+      let force = -300 * simAlpha / dist2;
+      let fx = dx / dist * force;
+      let fy = dy / dist * force;
+      nodes[i].vx -= fx; nodes[i].vy -= fy;
+      nodes[j].vx += fx; nodes[j].vy += fy;
+    }
+  }
+  
+  // Edge attraction
+  for (const edge of edges) {
+    if (!edge.visible) continue;
+    const s = nodes[edge.source], t = nodes[edge.target];
+    if (!s.visible || !t.visible) continue;
+    let dx = t.x - s.x, dy = t.y - s.y;
+    let dist = Math.sqrt(dx * dx + dy * dy) || 1;
+    const ideal = edge.isNct ? 200 : 100;
+    let force = (dist - ideal) * 0.01 * simAlpha;
+    let fx = dx / dist * force, fy = dy / dist * force;
+    s.vx += fx; s.vy += fy;
+    t.vx -= fx; t.vy -= fy;
+  }
+  
+  // Center gravity - stronger
+  for (let i = 0; i < n; i++) {
+    if (!nodes[i].visible) continue;
+    nodes[i].vx -= nodes[i].x * 0.001 * simAlpha;
+    nodes[i].vy -= nodes[i].y * 0.001 * simAlpha;
+  }
+  
+  // Apply with strong damping and velocity clamping
+  const maxV = 10;
+  for (let i = 0; i < n; i++) {
+    if (state.dragging === i || !nodes[i].visible) continue;
+    nodes[i].vx *= 0.8;
+    nodes[i].vy *= 0.8;
+    // Clamp velocity
+    if (nodes[i].vx > maxV) nodes[i].vx = maxV;
+    if (nodes[i].vx < -maxV) nodes[i].vx = -maxV;
+    if (nodes[i].vy > maxV) nodes[i].vy = maxV;
+    if (nodes[i].vy < -maxV) nodes[i].vy = -maxV;
+    nodes[i].x += nodes[i].vx;
+    nodes[i].y += nodes[i].vy;
+  }
+}
+
+function draw() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.width / dpr, h = canvas.height / dpr;
+  ctx.clearRect(0, 0, w, h);
+  ctx.save();
+  ctx.translate(state.transform.x, state.transform.y);
+  ctx.scale(state.transform.scale, state.transform.scale);
+  
+  const nodes = state.nodes, edges = state.edges;
+  const scale = state.transform.scale;
+  
+  // Determine highlighted set
+  const highlightSet = new Set();
+  const highlightEdges = new Set();
+  const selectedIdx = state.selectedTable ? nodes.findIndex(n => n.table.name === state.selectedTable) : -1;
+  
+  if (selectedIdx >= 0) {
+    highlightSet.add(selectedIdx);
+    edges.forEach((e, ei) => {
+      if (!e.visible) return;
+      if (e.source === selectedIdx || e.target === selectedIdx) {
+        highlightSet.add(e.source);
+        highlightSet.add(e.target);
+        highlightEdges.add(ei);
+      }
+    });
+  }
+  
+  // Draw edges
+  edges.forEach((edge, ei) => {
+    if (!edge.visible) return;
+    const s = nodes[edge.source], t = nodes[edge.target];
+    if (!s.visible || !t.visible) return;
+    
+    const isHL = highlightEdges.has(ei);
+    const dimmed = selectedIdx >= 0 && !isHL;
+    
+    const mx = (s.x + t.x) / 2, my = (s.y + t.y) / 2;
+    const dx = t.x - s.x, dy = t.y - s.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const curveAmount = Math.min(0.15, 30 / (dist || 1));
+    const cx2 = mx + dy * curveAmount, cy2 = my - dx * curveAmount;
+    
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y);
+    ctx.quadraticCurveTo(cx2, cy2, t.x, t.y);
+    
+    if (dimmed) {
+      ctx.strokeStyle = 'rgba(46,51,72,0.15)';
+      ctx.lineWidth = 0.5;
+    } else if (isHL) {
+      ctx.strokeStyle = edge.isNct ? 'rgba(108,140,255,0.8)' : 'rgba(16,185,129,1)';
+      ctx.lineWidth = edge.isNct ? 2 : 3;
+    } else {
+      ctx.strokeStyle = edge.isNct ? 'rgba(108,140,255,0.15)' : 'rgba(16,185,129,0.3)';
+      ctx.lineWidth = edge.isNct ? 0.5 : 1.2;
+    }
+    ctx.stroke();
+    
+    // Arrow
+    if (!edge.isNct && (isHL || selectedIdx < 0) && !dimmed) {
+      const angle = Math.atan2(t.y - cy2, t.x - cx2);
+      const as = isHL ? 10 : 6;
+      const ax = t.x - (nodes[edge.target].size + 2) * Math.cos(angle);
+      const ay = t.y - (nodes[edge.target].size + 2) * Math.sin(angle);
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(ax - as * Math.cos(angle - 0.4), ay - as * Math.sin(angle - 0.4));
+      ctx.lineTo(ax - as * Math.cos(angle + 0.4), ay - as * Math.sin(angle + 0.4));
+      ctx.closePath();
+      ctx.fillStyle = isHL ? 'rgba(16,185,129,1)' : 'rgba(16,185,129,0.3)';
+      ctx.fill();
+    }
+  });
+  
+  // Draw nodes
+  nodes.forEach((node, i) => {
+    if (!node.visible) return;
+    const isSelected = node.table.name === state.selectedTable;
+    const isHovered = i === state.hoveredTable;
+    const isHL = highlightSet.has(i);
+    const dimmed = selectedIdx >= 0 && !isHL;
+    const r = node.size;
+    
+    // Glow
+    if (isSelected || isHovered) {
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, r + 12, 0, Math.PI * 2);
+      const grad = ctx.createRadialGradient(node.x, node.y, r, node.x, node.y, r + 12);
+      grad.addColorStop(0, node.color + '60');
+      grad.addColorStop(1, 'transparent');
+      ctx.fillStyle = grad;
+      ctx.fill();
+    }
+    
+    // Circle
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
+    if (dimmed) {
+      ctx.fillStyle = node.color + '12';
+      ctx.strokeStyle = node.color + '20';
+    } else {
+      ctx.fillStyle = isSelected ? node.color : node.color + '40';
+      ctx.strokeStyle = isSelected ? '#ffffff' : (isHL ? node.color : node.color + 'aa');
+    }
+    ctx.lineWidth = isSelected ? 3 : (isHL ? 2 : 1.5);
+    ctx.fill();
+    ctx.stroke();
+    
+    // Column count inside
+    if (!dimmed && scale > 0.3) {
+      ctx.font = 'bold ' + Math.max(7, r * 0.55) + 'px Inter, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.fillText(String(node.table.columns.length), node.x, node.y);
+    }
+    
+    // Label below
+    if (scale > 0.2 || isSelected || isHovered) {
+      const fs = Math.max(8, Math.min(12, 11));
+      ctx.font = (isSelected || isHovered ? 'bold ' : '600 ') + fs + 'px Inter, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      
+      if (dimmed) {
+        ctx.fillStyle = 'rgba(139,143,163,0.15)';
+      } else {
+        ctx.fillStyle = isSelected ? '#ffffff' : (isHL ? '#e1e4ed' : '#a0a5b8');
+      }
+      
+      // Background for label
+      if ((isSelected || isHovered) && !dimmed) {
+        const tw = ctx.measureText(node.table.name).width;
+        ctx.fillStyle = 'rgba(15,17,23,0.7)';
+        ctx.fillRect(node.x - tw/2 - 4, node.y + r + 3, tw + 8, fs + 4);
+        ctx.fillStyle = isSelected ? '#ffffff' : '#e1e4ed';
+      }
+      
+      ctx.fillText(node.table.name, node.x, node.y + r + 5);
+    }
+  });
+  
+  ctx.restore();
+}
+
+function animate() {
+  simulate();
+  draw();
+  requestAnimationFrame(animate);
+}
+
+// Table list
+function renderTableList() {
+  const list = document.getElementById('table-list');
+  const filtered = getFilteredTables();
+  
+  list.innerHTML = filtered.map(function(t) {
+    var dc = t.domain === 'Protocol' ? 'domain-protocol' : t.domain === 'Results' ? 'domain-results' : 'domain-both';
+    var sel = state.selectedTable === t.name ? 'selected' : '';
+    return '<div class="table-item ' + sel + '" data-table="' + t.name + '" onclick="selectTable(\'' + t.name + '\')">' +
+      '<div class="table-item-name">' + t.name + ' <span class="domain-badge ' + dc + '">' + (t.domain || 'Other') + '</span></div>' +
+      '<div class="table-item-meta"><span>' + t.columns.length + ' cols</span><span>' + 
+      (t.rows_per_study === 'one' ? '1:1' : '1:N') + '</span>' +
+      (t.row_count ? '<span>' + t.row_count + ' rows</span>' : '') + '</div></div>';
+  }).join('');
+  updateStats();
+}
+
+function getFilteredTables() {
+  var tables = state.tables;
+  var q = state.searchQuery.toLowerCase();
+  var f = state.filter;
+  
+  if (q) {
+    tables = tables.filter(function(t) {
+      if (t.name.toLowerCase().indexOf(q) >= 0) return true;
+      if (t.description.toLowerCase().indexOf(q) >= 0) return true;
+      return t.columns.some(function(c) { return c.name.toLowerCase().indexOf(q) >= 0; });
+    });
+  }
+  
+  if (f !== 'all') {
+    if (f === 'one' || f === 'many') {
+      tables = tables.filter(function(t) { return t.rows_per_study === f; });
+    } else {
+      tables = tables.filter(function(t) { return t.domain === f || t.domain === 'Protocol & Results'; });
+    }
+  }
+  
+  var vis = {};
+  tables.forEach(function(t) { vis[t.name] = true; });
+  state.nodes.forEach(function(n) { n.visible = !!vis[n.table.name]; });
+  return tables;
+}
+
+function selectTable(name) {
+  state.selectedTable = name;
+  renderTableList();
+  showDetail(name);
+  state.nodes.forEach(function(n) { n.highlighted = n.table.name === name; });
+  var item = document.querySelector('.table-item[data-table="' + name + '"]');
+  if (item) item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function esc(str) {
+  if (!str) return '';
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function showDetail(name) {
+  var table = state.tables.find(function(t) { return t.name === name; });
+  if (!table) return;
+  
+  document.getElementById('detail-panel').classList.add('open');
+  document.getElementById('detail-title').textContent = table.name;
+  document.getElementById('detail-desc').textContent = table.description;
+  
+  var badges = [
+    '<span class="detail-badge">' + (table.domain || 'Other') + '</span>',
+    '<span class="detail-badge">' + table.columns.length + ' columns</span>',
+    '<span class="detail-badge">' + (table.rows_per_study === 'one' ? '1:1 with Studies' : '1:Many with Studies') + '</span>'
+  ];
+  if (table.row_count) badges.push('<span class="detail-badge">' + table.row_count + ' rows</span>');
+  badges.push('<span class="detail-badge">PK: ' + (table.primary_key || 'id') + '</span>');
+  document.getElementById('detail-badges').innerHTML = badges.join('');
+  
+  var html = '<div class="detail-section"><div class="detail-section-title">Columns (' + table.columns.length + ')</div>';
+  table.columns.forEach(function(col) {
+    var ic = 'col-icon-reg', it = '';
+    if (col.is_primary_key) { ic = 'col-icon-pk'; it = 'PK'; }
+    else if (col.is_nct_id) { ic = 'col-icon-nct'; it = 'FK'; }
+    else if (col.is_foreign_key) { ic = 'col-icon-fk'; it = 'FK'; }
+    var desc = col.description ? esc(col.description.substring(0, 80)) : '';
+    html += '<div class="col-row" title="' + esc(col.description) + '">' +
+      '<div class="col-icon ' + ic + '">' + it + '</div>' +
+      '<span class="col-name">' + col.name + '</span>' +
+      '<span class="col-type">' + col.type + '</span>' +
+      (desc ? '<span class="col-desc">' + desc + '</span>' : '') + '</div>';
+  });
+  html += '</div>';
+  
+  var rels = getRelationships(name);
+  if (rels.length > 0) {
+    html += '<div class="detail-section"><div class="detail-section-title">Relationships (' + rels.length + ')</div>';
+    rels.forEach(function(rel) {
+      var tc = rel.type === 'parent' ? 'rel-type-parent' : 'rel-type-child';
+      var tl = rel.type === 'parent' ? 'Parent' : 'Child';
+      var arrow = rel.type === 'parent' ? '&#8592;' : '&#8594;';
+      html += '<div class="rel-row" onclick="selectTable(\'' + rel.otherTable + '\')">' +
+        '<span class="rel-arrow">' + arrow + '</span>' +
+        '<span class="rel-table">' + rel.otherTable + '</span>' +
+        '<span class="rel-col">' + rel.childCol + ' ' + arrow + ' ' + rel.parentCol + '</span>' +
+        '<span class="rel-type ' + tc + '">' + tl + '</span></div>';
+    });
+    html += '</div>';
+  }
+  
+  // SQL examples
+  html += '<div class="detail-section"><div class="detail-section-title">SQL Join Examples</div>';
+  if (name !== 'studies') {
+    html += '<div class="sql-box"><span class="sql-keyword">SELECT</span> *\n<span class="sql-keyword">FROM</span> <span class="sql-table">studies</span> s\n<span class="sql-keyword">JOIN</span> <span class="sql-table">' + name + '</span> t\n  <span class="sql-keyword">ON</span> <span class="sql-column">s.nct_id</span> = <span class="sql-column">t.nct_id</span>;</div>';
+  }
+  
+  var nonNct = rels.filter(function(r) { return r.childCol !== 'nct_id'; });
+  nonNct.forEach(function(rel) {
+    html += '<div class="sql-box" style="margin-top:8px">';
+    if (rel.type === 'child') {
+      html += '<span class="sql-keyword">SELECT</span> *\n<span class="sql-keyword">FROM</span> <span class="sql-table">' + name + '</span> p\n<span class="sql-keyword">JOIN</span> <span class="sql-table">' + rel.otherTable + '</span> c\n  <span class="sql-keyword">ON</span> <span class="sql-column">p.id</span> = <span class="sql-column">c.' + rel.childCol + '</span>;';
+    } else {
+      html += '<span class="sql-keyword">SELECT</span> *\n<span class="sql-keyword">FROM</span> <span class="sql-table">' + name + '</span> c\n<span class="sql-keyword">JOIN</span> <span class="sql-table">' + rel.otherTable + '</span> p\n  <span class="sql-keyword">ON</span> <span class="sql-column">c.' + rel.childCol + '</span> = <span class="sql-column">p.' + rel.parentCol + '</span>;';
+    }
+    html += '</div>';
+  });
+  html += '</div>';
+  
+  document.getElementById('detail-body').innerHTML = html;
+}
+
+function getRelationships(tableName) {
+  var rels = [];
+  state.foreignKeys.forEach(function(fk) {
+    if (fk.child_table === tableName) {
+      rels.push({ type: 'parent', otherTable: fk.parent_table, childCol: fk.child_column, parentCol: fk.parent_column });
+    }
+    if (fk.parent_table === tableName) {
+      rels.push({ type: 'child', otherTable: fk.child_table, childCol: fk.child_column, parentCol: fk.parent_column });
+    }
+  });
+  return rels;
+}
+
+function closeDetail() {
+  document.getElementById('detail-panel').classList.remove('open');
+  state.selectedTable = null;
+  state.nodes.forEach(function(n) { n.highlighted = false; });
+  renderTableList();
+}
+
+function setupSearch() {
+  document.getElementById('search-input').addEventListener('input', function(e) {
+    state.searchQuery = e.target.value;
+    renderTableList();
+    simAlpha = Math.max(simAlpha, 0.3);
+  });
+}
+
+function setupFilters() {
+  document.querySelectorAll('.filter-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active','active-protocol','active-results'); });
+      var f = btn.dataset.filter;
+      state.filter = f;
+      if (f === 'Protocol') btn.classList.add('active-protocol');
+      else if (f === 'Results') btn.classList.add('active-results');
+      else btn.classList.add('active');
+      renderTableList();
+      simAlpha = Math.max(simAlpha, 0.3);
+    });
+  });
+}
+
+function setView(view) {
+  state.view = view;
+  document.querySelectorAll('.tool-btn[data-view]').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.view === view);
+  });
+  if (view === 'grid') arrangeGrid();
+  else { simAlpha = 0.5; setTimeout(fitAll, 500); }
+}
+
+function arrangeGrid() {
+  var visible = state.nodes.filter(function(n) { return n.visible; });
+  var cols = Math.ceil(Math.sqrt(visible.length));
+  visible.forEach(function(n, i) {
+    n.x = (i % cols) * 160;
+    n.y = Math.floor(i / cols) * 140;
+    n.vx = 0; n.vy = 0;
+  });
+  simAlpha = 0;
+  setTimeout(fitAll, 100);
+}
+
+function toggleNctEdges() {
+  state.showNctEdges = !state.showNctEdges;
+  state.edges.forEach(function(e) { if (e.isNct) e.visible = state.showNctEdges; });
+  simAlpha = Math.max(simAlpha, 0.3);
+  updateStats();
+}
+
+function resetZoom() {
+  state.transform = { x: 0, y: 0, scale: 1 };
+}
+
+function fitAll() {
+  var visible = state.nodes.filter(function(n) { return n.visible; });
+  if (!visible.length) return;
+  var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  visible.forEach(function(n) {
+    minX = Math.min(minX, n.x - 60);
+    minY = Math.min(minY, n.y - 60);
+    maxX = Math.max(maxX, n.x + 60);
+    maxY = Math.max(maxY, n.y + 60);
+  });
+  var container = document.getElementById('canvas-container');
+  var cw = container.clientWidth, ch = container.clientHeight;
+  var pad = 30;
+  var sx = (cw - pad * 2) / Math.max(maxX - minX, 1);
+  var sy = (ch - pad * 2) / Math.max(maxY - minY, 1);
+  var scale = Math.min(sx, sy, 3);
+  state.transform.scale = scale;
+  state.transform.x = (cw - (maxX + minX) * scale) / 2;
+  state.transform.y = (ch - (maxY + minY) * scale) / 2;
+}
+
+function updateStats() {
+  var v = state.nodes.filter(function(n) { return n.visible; }).length;
+  var ve = state.edges.filter(function(e) { return e.visible; }).length;
+  document.getElementById('stats').textContent = v + ' tables | ' + ve + ' relationships';
+}
+
+function showTooltip(x, y, table) {
+  var tip = document.getElementById('tooltip');
+  var rels = getRelationships(table.name).filter(function(r) { return r.childCol !== 'nct_id'; });
+  tip.innerHTML = '<strong>' + table.name + '</strong><br>' +
+    '<span style="color:var(--text-dim)">' + (table.domain||'') + ' | ' + table.columns.length + ' cols | ' + 
+    (table.rows_per_study === 'one' ? '1:1' : '1:N') + '</span>' +
+    (rels.length > 0 ? '<br><span style="color:var(--fk)">' + rels.length + ' FK relationships</span>' : '') +
+    '<br><span style="color:var(--text-dim);font-size:10px">Click to view details</span>';
+  tip.style.display = 'block';
+  tip.style.left = Math.min(x + 14, window.innerWidth - 320) + 'px';
+  tip.style.top = (y + 14) + 'px';
+}
+
+function hideTooltip() {
+  document.getElementById('tooltip').style.display = 'none';
+}
+
+document.addEventListener('DOMContentLoaded', init);
+
+</script>
+</body>
+</html>
