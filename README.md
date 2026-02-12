@@ -20,7 +20,7 @@ An interactive, single-file web application for visually exploring the **AACT (A
 
 ### Usage
 
-Open `aact_schema_explorer.html` in any modern web browser. No installation needed.
+Open `index.html` in any modern web browser. No installation needed.
 
 ### Data Sources
 
